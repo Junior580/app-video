@@ -34,7 +34,7 @@ class Video(models.Model):
         verbose_name_plural = "Vídeos"
 
     def __str__(self):
-        return self.title
+        return str(self.title)
 
 
 class VideoMedia(models.Model):
@@ -74,7 +74,7 @@ class Tag(models.Model):
         verbose_name_plural = "Tags"
 
     def __str__(self):
-        return self.name
+        return str(self.name)
 
 
 # Create your models here.
