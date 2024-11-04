@@ -1,59 +1,43 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
+	_ "github.com/lib/pq"
+	"log/slog"
 	"os"
-	"path/filepath"
-	"regexp"
-	"sort"
-	"strconv"
 )
 
+func connectPostgres() (*sql.DB, error) {
+	user := getEnvOrDefault("POSTGRES_USER", "user")
+	password := getEnvOrDefault("POSTGRES_PASSWORD", "password")
+	dbname := getEnvOrDefault("POSTGRES_DB", "converter")
+	host := getEnvOrDefault("POSTGRES_HOST", "host.docker.internal")
+	sslmode := getEnvOrDefault("POSTGRES_SSL_MODE", "disable")
+
+	connStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s sslmode=%s", user, password, dbname, host, sslmode)
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		slog.Error("Failed to connect to PostgreSQL", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	err = db.Ping()
+	if err != nil {
+		slog.Error("Failed to ping PostgreSQL", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	slog.Info("Connected to PostgreSQL successfully")
+	return db, nil
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultValue
+}
+
 func main() {
-	mergeChunks("midiatest/midia/upload/1", "merged.mp4")
-}
-
-func extractNumber(fileName string) int {
-	re := regexp.MustCompile(`\d+`)
-	numStr := re.FindString(filepath.Base(fileName))
-	num, err := strconv.Atoi(numStr)
-
-	if err != nil {
-		return -1
-	}
-
-	return num
-}
-
-func mergeChunks(inputDir, outputFile string) error {
-	chunks, err := filepath.Glob(filepath.Join(inputDir, "*.chunk"))
-
-	if err != nil {
-		return fmt.Errorf("failed to find chunks: %v", err)
-	}
-
-	sort.Slice(chunks, func(i, j int) bool {
-		return extractNumber(chunks[i]) < extractNumber(chunks[j])
-	})
-
-	output, err := os.Create(outputFile)
-	if err != nil {
-		return fmt.Errorf("failed to create a output file: %v", err)
-	}
-
-	defer output.Close()
-
-	for _, chunk := range chunks {
-		input, err := os.Open(chunk)
-		if err != nil {
-			return fmt.Errorf("failed to open chunk: %v", err)
-		}
-
-		_, err = output.ReadFrom(input)
-		if err != nil {
-			return fmt.Errorf("failed to write %s to merged file: %v", chunk, err)
-		}
-		input.Close()
-	}
-	return nil
 }
