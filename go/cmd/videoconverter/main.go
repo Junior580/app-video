@@ -1,11 +1,17 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
-	_ "github.com/lib/pq"
+	"goapp/pkg/log"
+	"goapp/pkg/rabbitmq"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+
+	_ "github.com/lib/pq"
 )
 
 func connectPostgres() (*sql.DB, error) {
@@ -40,4 +46,28 @@ func getEnvOrDefault(key, defaultValue string) string {
 }
 
 func main() {
+	isDebug := getEnvOrDefault("DEBUG", "false") == "true"
+	logger := log.NewLogger(isDebug)
+	slog.SetDefault(logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	db, err := connectPostgres()
+	if err != nil {
+		return
+	}
+
+	defer db.Close()
+	rabbitMQURL := getEnvOrDefault("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+	rabbitClient, err := rabbitmq.NewRabbitClient(ctx, rabbitMQURL)
+	if err != nil {
+		slog.Error("Failed to connect to RabbitMQ", slog.String("error", err.Error()))
+		return
+	}
+	defer rabbitClient.Close()
+
 }
